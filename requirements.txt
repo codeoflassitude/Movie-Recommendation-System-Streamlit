@@ -2,8 +2,8 @@ streamlit
 pandas
 numpy
 scikit-learn
-sentence-transformers==3.0.1
-torch==2.3.0+cpu
-torchvision==0.18.0+cpu
-torchaudio==2.3.0+cpu
+sentence-transformers
+torch
+torchvision
+torchaudio
 --extra-index-url https://download.pytorch.org/whl/cpu
