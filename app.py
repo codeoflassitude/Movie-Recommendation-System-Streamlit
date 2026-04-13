@@ -79,7 +79,17 @@ df, weighted_features, tfidf_vectorizer, genre_columns = load_and_process_data()
 # ====================== LOAD MODELS ======================
 @st.cache_resource(show_spinner="Loading embedding model (this may take a minute on first run)...")
 def load_embedding_model():
-    return SentenceTransformer('all-MiniLM-L6-v2')
+    # Suppress common harmless warnings
+    import warnings
+    from transformers import logging
+    warnings.filterwarnings("ignore")
+    logging.set_verbosity_error()
+    
+    return SentenceTransformer(
+        'all-MiniLM-L6-v2',
+        token=False,           # Avoids the unauthenticated warning
+        trust_remote_code=True
+    )
 
 embedding_model = load_embedding_model()
 
