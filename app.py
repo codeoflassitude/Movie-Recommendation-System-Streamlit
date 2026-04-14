@@ -111,21 +111,30 @@ if 'feedback_movies' not in st.session_state:
 
 # ====================== SIDEBAR ======================
 st.sidebar.header("Your Liked Movies")
-liked_input = st.sidebar.multiselect(
-    "Select 3–10 movies you like",
-    options=sorted(df['title'].unique()),
-    default=st.session_state.liked_titles,
-    max_selections=10
-)
 
-if liked_input != st.session_state.liked_titles:
-    st.session_state.liked_titles = liked_input
+# Use a form-like approach to prevent unexpected deselection
+with st.sidebar.form("liked_movies_form", clear_on_submit=False):
+    liked_input = st.multiselect(
+        "Select 3–10 movies you like",
+        options=sorted(df['title'].unique()),
+        default=st.session_state.liked_titles,
+        max_selections=10,
+        help="Select movies you enjoy. Changes are saved only when you click 'Update Liked Movies'"
+    )
+    
+    submitted = st.form_submit_button("✅ Update Liked Movies")
+    
+    if submitted:
+        st.session_state.liked_titles = liked_input
+        st.sidebar.success("Liked movies updated!")
 
-# Display current liked movies
+# Display currently liked movies (always visible)
 if st.session_state.liked_titles:
     st.sidebar.subheader("Currently Liked Movies")
     for title in st.session_state.liked_titles:
         st.sidebar.write(f"• {title}")
+else:
+    st.sidebar.info("No liked movies yet. Add some above.")
 
 st.sidebar.subheader("Extra Preferences")
 positive_kw = st.sidebar.text_input("Keywords to emphasize (optional)", 
