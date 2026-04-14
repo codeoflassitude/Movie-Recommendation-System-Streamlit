@@ -201,49 +201,59 @@ if st.button("🚀 Get Recommendations", type="primary"):
         if len(filtered) >= 15:
             break
    
+    #st.session_state.rec_df = df.iloc[filtered][['title', 'genres', 'vote_average', 'popularity', 'keywords_text']].copy()
+    #st.session_state.rec_df['score'] = [scores[i] for i in filtered]
+    #st.session_state.rec_df = st.session_state.rec_df.head(15)
+
     st.session_state.rec_df = df.iloc[filtered][['title', 'genres', 'vote_average', 'popularity', 'keywords_text']].copy()
+    
+    # Add poster_path if it exists in your dataset
+    if 'poster_path' in df.columns:
+        st.session_state.rec_df['poster_path'] = df.iloc[filtered]['poster_path'].values
+    
     st.session_state.rec_df['score'] = [scores[i] for i in filtered]
     st.session_state.rec_df = st.session_state.rec_df.head(15)
     
+    # ====================== DISPLAY RECOMMENDATIONS ======================
     st.success(f"✅ Top 15 recommendations using **{model_choice}**")
 
     st.subheader("🎥 Recommended Movies")
 
-    for _, row in rec_df.iterrows():
-        col1, col2 = st.columns([1, 3])
-        
-        with col1:
-            # Display poster if poster_path exists
-            if 'poster_path' in df.columns and pd.notna(row.get('poster_path')):
-                poster_url = f"https://image.tmdb.org/t/p/w500{row['poster_path']}"
-                st.image(poster_url, width=150)
-            else:
-                st.image("https://via.placeholder.com/150x225?text=No+Poster", width=150)
-        
-        with col2:
-            st.subheader(row['title'])
+    # Use the saved recommendations from session state
+    if 'rec_df' in st.session_state and not st.session_state.rec_df.empty:
+        for _, row in st.session_state.rec_df.iterrows():
+            col1, col2 = st.columns([1, 3])
             
-            # IMDb / Vote Average
-            vote = row.get('vote_average', 0)
-            st.write(f"**IMDb Rating:** ⭐ {vote:.1f}/10")
+            with col1:
+                # Show movie poster
+                if 'poster_path' in df.columns and pd.notna(row.get('poster_path')):
+                    poster_url = f"https://image.tmdb.org/t/p/w500{row['poster_path']}"
+                    st.image(poster_url, width=160)
+                else:
+                    st.image("https://via.placeholder.com/150x225?text=No+Poster", width=160)
             
-            # Genres
-            st.write(f"**Genres:** {row.get('genres', 'N/A')}")
+            with col2:
+                st.subheader(row['title'])
+                
+                # Rating
+                vote = row.get('vote_average', 0)
+                st.write(f"**IMDb Rating:** ⭐ {vote:.1f}/10")
+                
+                # Genres
+                st.write(f"**Genres:** {row.get('genres', 'N/A')}")
+                
+                # Why you may like this (based on keywords)
+                keywords = str(row.get('keywords_text', ''))
+                if keywords.strip():
+                    kw_list = [k.replace('_', ' ').title() for k in keywords.split() if k.strip()]
+                    why_text = ", ".join(kw_list[:12])   # Limit to 12 nice-looking keywords
+                    st.write(f"**Why you may like this:** {why_text}")
+                else:
+                    st.write("**Why you may like this:** Similar in genre and story style")
             
-            # Why you may like this (keywords)
-            keywords = row.get('keywords_text', '')
-            if keywords:
-                # Clean and show top keywords (split and limit to 8-10)
-                kw_list = [k.replace('_', ' ').title() for k in keywords.split() if k]
-                why_text = ", ".join(kw_list[:10])  # Limit to 10 keywords
-                st.write(f"**Why you may like this:** {why_text}")
-            else:
-                st.write("**Why you may like this:** Similar genres and story elements")
-            
-            # Optional small score for debugging (you can remove later)
-            # st.caption(f"Match Score: {row['score']:.3f}")
-        
-        st.divider()  # Nice separation between movies
+            st.divider()  # Clean separation between movies
+    else:
+        st.info("No recommendations generated yet. Click 'Get Recommendations' above.")
 
 # ====================== FEEDBACK LOOP (Random Movies) ======================
 st.subheader("💬 Feedback Loop - Discover & Rate Random Movies")
