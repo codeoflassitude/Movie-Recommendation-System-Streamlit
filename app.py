@@ -37,23 +37,19 @@ def load_and_process_data():
     df['keywords_list'] = df['keywords'].apply(process_keywords)
     df['keywords_text'] = df['keywords_list'].apply(keywords_to_text)
    
-    # Multi-hot encoding for genres
     mlb = MultiLabelBinarizer()
     genres_encoded = mlb.fit_transform(df['genres_list'])
     genres_df = pd.DataFrame(genres_encoded, columns=mlb.classes_)
    
-    # TF-IDF for keywords
     tfidf = TfidfVectorizer(max_features=500)
     keywords_tfidf = tfidf.fit_transform(df['keywords_text'])
     keywords_df = pd.DataFrame(keywords_tfidf.toarray(), columns=tfidf.get_feature_names_out())
    
-    # Normalize numerical features
     numerical_columns = ['vote_average', 'vote_count', 'revenue', 'runtime', 'budget', 'popularity']
     numerical_columns = [col for col in numerical_columns if col in df.columns]
     scaler = MinMaxScaler()
     df_num_scaled = pd.DataFrame(scaler.fit_transform(df[numerical_columns]), columns=numerical_columns)
    
-    # Weighted feature matrix
     genre_weight = 1.5
     keyword_weight = 2.0
     rating_weight = 0.5
@@ -64,7 +60,6 @@ def load_and_process_data():
         df_num_scaled * rating_weight
     ], axis=1)
    
-    # Text for embeddings
     if 'overview' in df.columns:
         df['embed_text'] = df.apply(
             lambda row: f"Genres: {', '.join(row['genres_list'])}. Keywords: {row['keywords_text']}. Plot: {row['overview']}", axis=1)
@@ -117,13 +112,12 @@ liked_input = st.sidebar.multiselect(
     "Select 3–15 movies you like",
     options=sorted(df['title'].unique()),
     default=st.session_state.liked_titles,
-    max_selections=15                     # ← Changed to 15
+    max_selections=15
 )
 
 if liked_input != st.session_state.liked_titles:
     st.session_state.liked_titles = liked_input
 
-# Display current liked movies
 if st.session_state.liked_titles:
     st.sidebar.subheader("Currently Liked")
     for title in st.session_state.liked_titles:
@@ -154,7 +148,6 @@ if st.button("🚀 Get Recommendations", type="primary"):
 
     liked_df = df[df['title'].isin(st.session_state.liked_titles)]
     
-    # Generate user vector and similarity scores
     if model_choice == "Embedding-based (Semantic)":
         liked_emb = embeddings[liked_df.index]
         user_vec = liked_emb.mean(axis=0)
@@ -175,11 +168,9 @@ if st.button("🚀 Get Recommendations", type="primary"):
         sims_full[indices[0]] = sims
         sims = sims_full
    
-    # Apply small hybrid boost
     pop = df['popularity'].values
     scores = sims * (1 + hybrid_weight * (pop / pop.max()))
    
-    # Get top recommendations (exclude liked & excluded)
     rec_indices = np.argsort(scores)[::-1]
     filtered = []
     avoid_list = [k.strip().lower() for k in avoid_kw.split() if k.strip()] if avoid_kw else []
@@ -191,27 +182,50 @@ if st.button("🚀 Get Recommendations", type="primary"):
         if avoid_list and any(k in str(df.iloc[i]['keywords_text']).lower() for k in avoid_list):
             continue
         filtered.append(i)
-        if len(filtered) >= 20:          # ← Changed to 20
+        if len(filtered) >= 20:
             break
    
-    st.session_state.rec_df = df.iloc[filtered][['title', 'genres', 'vote_average', 'popularity', 'keywords_text']].copy()
+    st.session_state.rec_df = df.iloc[filtered][['title', 'genres', 'vote_average', 'popularity', 'keywords_text', 'poster_path']].copy()
     st.session_state.rec_df['score'] = [scores[i] for i in filtered]
     st.session_state.rec_df = st.session_state.rec_df.head(20)
     
     st.success(f"✅ Top 20 recommendations using **{model_choice}**")
+
+# ====================== DISPLAY RECOMMENDATIONS WITH POSTERS ======================
+if st.session_state.rec_df is not None and not st.session_state.rec_df.empty:
+    st.subheader("🎥 Your Recommended Movies")
     
-    # Display recommendations
-    display_df = st.session_state.rec_df[['title', 'score', 'genres', 'vote_average', 'popularity']].copy()
-    display_df = display_df.style.format({
-        'score': "{:.3f}",
-        'vote_average': "{:.1f}",
-        'popularity': "{:.1f}"
-    })
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    for idx, row in st.session_state.rec_df.iterrows():
+        poster_path = row.get('poster_path')
+        
+        col1, col2, col3, col4 = st.columns([1.2, 5, 1.2, 1])
+        
+        with col1:
+            if pd.notna(poster_path) and str(poster_path).strip() != "":
+                poster_url = f"https://image.tmdb.org/t/p/w200/{poster_path}"
+                st.image(poster_url, width=110)
+            else:
+                st.image("https://via.placeholder.com/100x150?text=No+Poster", width=110)
+        
+        with col2:
+            st.write(f"**{row['title']}**")
+            st.caption(f"Genres: {row.get('genres', 'N/A')} | Rating: {row.get('vote_average', 'N/A'):.1f}")
+        
+        with col3:
+            st.metric(label="Score", value=f"{row['score']:.3f}")
+        
+        with col4:
+            if st.button("👍", key=f"like_rec_{idx}"):
+                if row['title'] not in st.session_state.liked_titles:
+                    st.session_state.liked_titles.append(row['title'])
+                    st.success(f"Added **{row['title']}**", icon="👍")
+            if st.button("👎", key=f"dislike_rec_{idx}"):
+                st.session_state.excluded_titles.add(row['title'])
+                st.info(f"Excluded **{row['title']}**", icon="👎")
 
 # ====================== FEEDBACK LOOP (Random Movies with Posters) ======================
 st.subheader("💬 Feedback Loop - Discover & Rate Random Movies")
-st.caption("Rate these random movies to help fine-tune your taste. Use 👍 to add to liked movies and 👎 to exclude.")
+st.caption("Rate random movies to better understand your taste.")
 
 if st.button("🎲 Show Random Movies for Feedback"):
     available = df[~df['title'].isin(list(st.session_state.liked_titles) + list(st.session_state.excluded_titles))]
@@ -225,10 +239,9 @@ if st.button("🎲 Show Random Movies for Feedback"):
 
 if st.session_state.get('feedback_movies'):
     st.write("**Rate these movies:**")
-    
     for idx in st.session_state.feedback_movies:
         row = df.iloc[idx]
-        poster_path = row.get('poster_path')   # Change if your column name is different
+        poster_path = row.get('poster_path')
         
         col1, col2, col3, col4 = st.columns([1.2, 5, 1, 1])
         
@@ -255,9 +268,7 @@ if st.session_state.get('feedback_movies'):
                 st.info(f"Excluded **{row['title']}**", icon="👎")
 
 # ====================== REFRESH BUTTON ======================
-col_refresh, _ = st.columns([1, 3])
-with col_refresh:
-    if st.button("🔄 Refresh Recommendations", type="secondary"):
-        st.rerun()
+if st.button("🔄 Refresh Recommendations", type="secondary"):
+    st.rerun()
 
 st.caption("Liked movies (up to 15) are automatically used when you refresh recommendations.")
