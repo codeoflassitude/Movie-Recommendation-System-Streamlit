@@ -191,43 +191,52 @@ if st.button("🚀 Get Recommendations", type="primary"):
     
     st.success(f"✅ Top 20 recommendations using **{model_choice}**")
 
-# ====================== DISPLAY RECOMMENDATIONS WITH POSTERS ======================
-if st.session_state.rec_df is not None and not st.session_state.rec_df.empty:
-    st.subheader("🎥 Your Recommended Movies")
-    
-    for idx, row in st.session_state.rec_df.iterrows():
-        poster_path = row.get('poster_path')
-        
-        col1, col2, col3, col4 = st.columns([1.2, 5, 1.2, 1])
-        
-        with col1:
-            if pd.notna(poster_path) and str(poster_path).strip() != "":
-                poster_url = f"https://image.tmdb.org/t/p/w200/{poster_path}"
-                st.image(poster_url, width=110)
-            else:
-                st.image("https://via.placeholder.com/100x150?text=No+Poster", width=110)
-        
-        with col2:
-            st.write(f"**{row['title']}**")
-            st.caption(f"Genres: {row.get('genres', 'N/A')} | Rating: {row.get('vote_average', 'N/A'):.1f}")
-        
-        with col3:
-            st.metric(label="Score", value=f"{row['score']:.3f}")
-        
-        with col4:
-            if st.button("👍", key=f"like_rec_{idx}"):
-                if row['title'] not in st.session_state.liked_titles:
-                    st.session_state.liked_titles.append(row['title'])
-                    st.success(f"Added **{row['title']}**", icon="👍")
-            if st.button("👎", key=f"dislike_rec_{idx}"):
-                st.session_state.excluded_titles.add(row['title'])
-                st.info(f"Excluded **{row['title']}**", icon="👎")
+st.success(f"✅ Top 15 recommendations using **{model_choice}**")
+
+    st.subheader("🎥 Recommended Movies")
+
+    # Use the saved recommendations from session state
+    if 'rec_df' in st.session_state and not st.session_state.rec_df.empty:
+        for _, row in st.session_state.rec_df.iterrows():
+            col1, col2 = st.columns([1, 3])
+            
+            with col1:
+                # Show movie poster
+                if 'poster_path' in df.columns and pd.notna(row.get('poster_path')):
+                    poster_url = f"https://image.tmdb.org/t/p/w500{row['poster_path']}"
+                    st.image(poster_url, width=160)
+                else:
+                    st.image("https://via.placeholder.com/150x225?text=No+Poster", width=160)
+            
+            with col2:
+                st.subheader(row['title'])
+                
+                # Rating
+                vote = row.get('vote_average', 0)
+                st.write(f"**IMDb Rating:** ⭐ {vote:.1f}/10")
+                
+                # Genres
+                st.write(f"**Genres:** {row.get('genres', 'N/A')}")
+                
+                # Why you may like this (based on keywords)
+                keywords = str(row.get('keywords_text', ''))
+                if keywords.strip():
+                    kw_list = [k.replace('_', ' ').title() for k in keywords.split() if k.strip()]
+                    why_text = ", ".join(kw_list[:12])   # Limit to 12 nice-looking keywords
+                    st.write(f"**Why you may like this:** {why_text}")
+                else:
+                    st.write("**Why you may like this:** Similar in genre and story style")
+            
+            st.divider()  # Clean separation between movies
+    else:
+        st.info("No recommendations generated yet. Click 'Get Recommendations' above.")
 
 # ====================== FEEDBACK LOOP (Random Movies with Posters) ======================
 st.subheader("💬 Feedback Loop - Discover & Rate Random Movies")
-st.caption("Rate random movies to better understand your taste.")
+st.caption("Rate these random movies to help fine-tune your taste. Use 👍 to add to liked movies and 👎 to exclude.")
 
 if st.button("🎲 Show Random Movies for Feedback"):
+    # Generate 10–12 random movies (excluding already liked or excluded)
     available = df[~df['title'].isin(list(st.session_state.liked_titles) + list(st.session_state.excluded_titles))]
     if len(available) > 0:
         sample_size = min(12, len(available))
@@ -237,11 +246,13 @@ if st.button("🎲 Show Random Movies for Feedback"):
         st.warning("No more movies available for feedback.")
         st.session_state.feedback_movies = []
 
+# Show feedback movies with posters
 if st.session_state.get('feedback_movies'):
     st.write("**Rate these movies:**")
+    
     for idx in st.session_state.feedback_movies:
         row = df.iloc[idx]
-        poster_path = row.get('poster_path')
+        poster_path = row.get('poster_path')  # Change column name if different
         
         col1, col2, col3, col4 = st.columns([1.2, 5, 1, 1])
         
@@ -260,7 +271,7 @@ if st.session_state.get('feedback_movies'):
             if st.button("👍", key=f"like_fb_{idx}"):
                 if row['title'] not in st.session_state.liked_titles:
                     st.session_state.liked_titles.append(row['title'])
-                    st.success(f"Added **{row['title']}**", icon="👍")
+                    st.success(f"Added **{row['title']}** to liked movies", icon="👍")
         
         with col4:
             if st.button("👎", key=f"dislike_fb_{idx}"):
@@ -268,7 +279,9 @@ if st.session_state.get('feedback_movies'):
                 st.info(f"Excluded **{row['title']}**", icon="👎")
 
 # ====================== REFRESH BUTTON ======================
-if st.button("🔄 Refresh Recommendations", type="secondary"):
-    st.rerun()
+col_refresh, _ = st.columns([1, 3])
+with col_refresh:
+    if st.button("🔄 Refresh Recommendations", type="secondary"):
+        st.rerun()
 
-st.caption("Liked movies (up to 15) are automatically used when you refresh recommendations.")
+st.caption("Liked movies (including feedback) are automatically used when you refresh recommendations.")
