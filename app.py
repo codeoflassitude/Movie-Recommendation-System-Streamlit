@@ -107,34 +107,27 @@ if 'liked_titles' not in st.session_state:
 if 'excluded_titles' not in st.session_state:
     st.session_state.excluded_titles = set()
 if 'feedback_movies' not in st.session_state:
-    st.session_state.feedback_movies = []   # Will store indices for feedback
+    st.session_state.feedback_movies = []
+if 'rec_df' not in st.session_state:
+    st.session_state.rec_df = None
 
 # ====================== SIDEBAR ======================
 st.sidebar.header("Your Liked Movies")
+liked_input = st.sidebar.multiselect(
+    "Select 3–15 movies you like",
+    options=sorted(df['title'].unique()),
+    default=st.session_state.liked_titles,
+    max_selections=15                     # ← Changed to 15
+)
 
-# Use a form-like approach to prevent unexpected deselection
-with st.sidebar.form("liked_movies_form", clear_on_submit=False):
-    liked_input = st.multiselect(
-        "Select 3–10 movies you like",
-        options=sorted(df['title'].unique()),
-        default=st.session_state.liked_titles,
-        max_selections=10,
-        help="Select movies you enjoy. Changes are saved only when you click 'Update Liked Movies'"
-    )
-    
-    submitted = st.form_submit_button("✅ Update Liked Movies")
-    
-    if submitted:
-        st.session_state.liked_titles = liked_input
-        st.sidebar.success("Liked movies updated!")
+if liked_input != st.session_state.liked_titles:
+    st.session_state.liked_titles = liked_input
 
-# Display currently liked movies (always visible)
+# Display current liked movies
 if st.session_state.liked_titles:
-    st.sidebar.subheader("Currently Liked Movies")
+    st.sidebar.subheader("Currently Liked")
     for title in st.session_state.liked_titles:
         st.sidebar.write(f"• {title}")
-else:
-    st.sidebar.info("No liked movies yet. Add some above.")
 
 st.sidebar.subheader("Extra Preferences")
 positive_kw = st.sidebar.text_input("Keywords to emphasize (optional)", 
@@ -198,69 +191,29 @@ if st.button("🚀 Get Recommendations", type="primary"):
         if avoid_list and any(k in str(df.iloc[i]['keywords_text']).lower() for k in avoid_list):
             continue
         filtered.append(i)
-        if len(filtered) >= 15:
+        if len(filtered) >= 20:          # ← Changed to 20
             break
    
-    #st.session_state.rec_df = df.iloc[filtered][['title', 'genres', 'vote_average', 'popularity', 'keywords_text']].copy()
-    #st.session_state.rec_df['score'] = [scores[i] for i in filtered]
-    #st.session_state.rec_df = st.session_state.rec_df.head(15)
-
     st.session_state.rec_df = df.iloc[filtered][['title', 'genres', 'vote_average', 'popularity', 'keywords_text']].copy()
-    
-    # Add poster_path if it exists in your dataset
-    if 'poster_path' in df.columns:
-        st.session_state.rec_df['poster_path'] = df.iloc[filtered]['poster_path'].values
-    
     st.session_state.rec_df['score'] = [scores[i] for i in filtered]
-    st.session_state.rec_df = st.session_state.rec_df.head(15)
+    st.session_state.rec_df = st.session_state.rec_df.head(20)
     
-    # ====================== DISPLAY RECOMMENDATIONS ======================
-    st.success(f"✅ Top 15 recommendations using **{model_choice}**")
-
-    st.subheader("🎥 Recommended Movies")
-
-    # Use the saved recommendations from session state
-    if 'rec_df' in st.session_state and not st.session_state.rec_df.empty:
-        for _, row in st.session_state.rec_df.iterrows():
-            col1, col2 = st.columns([1, 3])
-            
-            with col1:
-                # Show movie poster
-                if 'poster_path' in df.columns and pd.notna(row.get('poster_path')):
-                    poster_url = f"https://image.tmdb.org/t/p/w500{row['poster_path']}"
-                    st.image(poster_url, width=160)
-                else:
-                    st.image("https://via.placeholder.com/150x225?text=No+Poster", width=160)
-            
-            with col2:
-                st.subheader(row['title'])
-                
-                # Rating
-                vote = row.get('vote_average', 0)
-                st.write(f"**IMDb Rating:** ⭐ {vote:.1f}/10")
-                
-                # Genres
-                st.write(f"**Genres:** {row.get('genres', 'N/A')}")
-                
-                # Why you may like this (based on keywords)
-                keywords = str(row.get('keywords_text', ''))
-                if keywords.strip():
-                    kw_list = [k.replace('_', ' ').title() for k in keywords.split() if k.strip()]
-                    why_text = ", ".join(kw_list[:12])   # Limit to 12 nice-looking keywords
-                    st.write(f"**Why you may like this:** {why_text}")
-                else:
-                    st.write("**Why you may like this:** Similar in genre and story style")
-            
-            st.divider()  # Clean separation between movies
-    else:
-        st.info("No recommendations generated yet. Click 'Get Recommendations' above.")
+    st.success(f"✅ Top 20 recommendations using **{model_choice}**")
+    
+    # Display recommendations
+    display_df = st.session_state.rec_df[['title', 'score', 'genres', 'vote_average', 'popularity']].copy()
+    display_df = display_df.style.format({
+        'score': "{:.3f}",
+        'vote_average': "{:.1f}",
+        'popularity': "{:.1f}"
+    })
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 # ====================== FEEDBACK LOOP (Random Movies with Posters) ======================
 st.subheader("💬 Feedback Loop - Discover & Rate Random Movies")
 st.caption("Rate these random movies to help fine-tune your taste. Use 👍 to add to liked movies and 👎 to exclude.")
 
 if st.button("🎲 Show Random Movies for Feedback"):
-    # Generate 10–12 random movies (excluding already liked or excluded)
     available = df[~df['title'].isin(list(st.session_state.liked_titles) + list(st.session_state.excluded_titles))]
     if len(available) > 0:
         sample_size = min(12, len(available))
@@ -270,13 +223,12 @@ if st.button("🎲 Show Random Movies for Feedback"):
         st.warning("No more movies available for feedback.")
         st.session_state.feedback_movies = []
 
-# Show feedback movies with posters
 if st.session_state.get('feedback_movies'):
     st.write("**Rate these movies:**")
     
     for idx in st.session_state.feedback_movies:
         row = df.iloc[idx]
-        poster_path = row.get('poster_path')  # Change column name if different
+        poster_path = row.get('poster_path')   # Change if your column name is different
         
         col1, col2, col3, col4 = st.columns([1.2, 5, 1, 1])
         
@@ -295,7 +247,7 @@ if st.session_state.get('feedback_movies'):
             if st.button("👍", key=f"like_fb_{idx}"):
                 if row['title'] not in st.session_state.liked_titles:
                     st.session_state.liked_titles.append(row['title'])
-                    st.success(f"Added **{row['title']}** to liked movies", icon="👍")
+                    st.success(f"Added **{row['title']}**", icon="👍")
         
         with col4:
             if st.button("👎", key=f"dislike_fb_{idx}"):
@@ -308,4 +260,4 @@ with col_refresh:
     if st.button("🔄 Refresh Recommendations", type="secondary"):
         st.rerun()
 
-st.caption("Liked movies (including feedback) are automatically used when you refresh recommendations.")
+st.caption("Liked movies (up to 15) are automatically used when you refresh recommendations.")
