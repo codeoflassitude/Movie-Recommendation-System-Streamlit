@@ -191,8 +191,6 @@ if st.button("🚀 Get Recommendations", type="primary"):
     
     st.success(f"✅ Top 20 recommendations using **{model_choice}**")
 
-st.success(f"✅ Top 15 recommendations using **{model_choice}**")
-
     st.subheader("🎥 Recommended Movies")
 
     # Use the saved recommendations from session state
